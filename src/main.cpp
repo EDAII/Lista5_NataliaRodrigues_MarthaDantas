@@ -28,27 +28,32 @@ void write_in_file(FILE *fp, Node *node) {
 
     if(node) {
         if(!node->left) {
-            nulls--;
-            fprintf(fp, "\n%d -- %c", node->value, nulls);
+            nulls++;
+            fprintf(fp, "\nnull%d [shape=point];", nulls);
+            fprintf(fp, "\n%d -> null%d;", node->value, nulls);
         }
         else
-            fprintf(fp, "\n%d -- %d", node->value, node->left->value);
+            fprintf(fp, "\n%d -> %d;", node->value, node->left->value);
 
         if(!node->right) {
-            nulls--;
-            fprintf(fp, "\n%d -- %c", node->value, nulls);
+            nulls++;
+            fprintf(fp, "\nnull%d [shape=point];", nulls);
+            fprintf(fp, "\n%d -> null%d;", node->value, nulls);
         }
         else
-            fprintf(fp, "\n%d -- %d", node->value, node->right->value);
+            fprintf(fp, "\n%d -> %d;", node->value, node->right->value);
 
         write_in_file(fp, node->left);
         write_in_file(fp, node->right);
     }
 }
 
-void create_image() {
+void create_image(const char *rotation) {
+    id++;
     FILE *fp = fopen("file.dot", "w+");
-    fprintf(fp, "graph {");
+    fprintf(fp, "digraph BST {");
+    fprintf(fp, "\n%s", rotation);
+    fprintf(fp, "\nnode [fontname=\"Arial\"];");
 
     write_in_file(fp, root);
 
@@ -65,46 +70,38 @@ void create_image() {
     strcat(command, ".png");
 
     system(command);
-
-    system("mogrify -resize 640x480 *.png");
-    system("convert -delay 20 -loop 0 *.png myimage.gif");
 }
 
-Node * right_rotation(Node *r){
-    Node* u = r->left;
-    r->left = u->right;
-    u->right = r;
+Node* right_rotation(Node* t){
+    Node* u = t->left;
+    t->left = u->right;
+    u->right = t;
 
     return u;
 }
 
-Node * left_rotation(Node *r){
-    Node* u = r->right;
-    r->right = u->left;
-    u->left = r;
+Node* left_rotation(Node* t){
+    Node* u = t->right;
+    t->right = u->left;
+    u->left = t;
 
     return u;
 }
 
-
-Node * left_right_rotation(Node *r){
-    r = left_rotation(r->left);
-    r = right_rotation(r);
-
-    return r;
+Node* right_left_rotation(Node* t){
+    t->right = right_rotation(t->right);
+    return left_rotation(t);
 }
 
-Node * right_left_rotation(Node *r){
-    r = right_rotation(r->right);
-    r = left_rotation(r);
-
-    return r;
+Node* left_right_rotation(Node* t){
+    t->left = left_rotation(t->left);
+    return right_rotation(t);
 }
 
 
 int height(Node *r) {
    if (r == NULL)
-      return -1;
+      return 0;
    else {
       int hl = height(r->left);
       int hr = height(r->right);
@@ -115,78 +112,49 @@ int height(Node *r) {
    }
 }
 
-int balancing_factor(Node *r){
-    int factor;
-    if(r){
-        factor = ((height(r->right) + 1) - (height(r->left) + 1));
-        return factor;
-    }
-
-    return -1;
+Node *new_node() {
+    Node *t = (Node *) malloc(sizeof(Node));
+    return t;
 }
 
-Node * balance_node(Node *node, int factor){
-    if(node){
-        if(factor < -1){
-            if(balancing_factor(node->left) < 0)
-                node = right_rotation(node);
-            else
-                node = left_right_rotation(node);
-        }
-        else if(factor > 1){
-            if(balancing_factor(node->right) > 0)
-                node = left_rotation(node);
-            else
-                node = right_left_rotation(node);
+Node* insert(int x, node* t){
+    if(t == NULL) {
+        t = new_node();
+        t->value = x;
+        t->left = t->right = NULL;
+    }
+    else if(x < t->value){
+        t->left = insert(x, t->left);
+        if(height(t->left) - height(t->right) == 2){
+            if(x < t->left->value) {
+                t = right_rotation(t);
+            }
+            else {
+                t = left_right_rotation(t);
+            }
         }
     }
-
-    return node;
-}
-
-Node * balance(Node *r) {
-    if(!r)
-        return r;
-    
-    int factor = balancing_factor(r);
-    if(factor > 1 || factor < -1)
-        r = balance_node(r, factor);
-
-    r->left = balance(r->left);
-    r->right = balance(r->right);
-
-    return r;
-}
-
-Node * new_node(int value){
-    Node *node = (Node*) malloc(sizeof(Node));
-
-    node->value = value;
-    node->left = NULL;
-    node->right = NULL;
-
-    return node;
-}
-
-Node * insert(Node *r, Node *node){
-    if(!r)
-        return node;
-    else {
-        if(node->value > r->value)
-            r->right = insert(r->right, node);
-        else
-            r->left = insert(r->left, node);
+    else if(x > t->value){
+        t->right = insert(x, t->right);
+        if(height(t->right) - height(t->left) == 2){
+            if(x > t->right->value) {
+                t = left_rotation(t);
+            }
+            else {
+                t = right_left_rotation(t);
+            }
+        }
     }
 
-    return r;
+    return t;
 }
 
 
 void insert_values(int size) {
     
     for(int i = 0; i < size; i++) {
-        root = insert(root, new_node(elements[i]));
-        root = balance(root);
+        root = insert(elements[i], root);
+        create_image("insert");
     }
 }
 
@@ -200,8 +168,8 @@ int main() {
     nulls = 0;
     generate_vector(size);
     insert_values(size);
-    
-    create_image();
+
+    // system("ffmpeg -framerate 1/1 -i %d.png -vf scale=1080:-2 avl.mp4");
 
     return 0;
 }
