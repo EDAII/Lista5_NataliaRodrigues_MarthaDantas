@@ -7,6 +7,7 @@ using namespace std;
 
 typedef struct node {
     int value;
+    struct node *dad;
     struct node *left;
     struct node *right;
 } Node;
@@ -52,7 +53,7 @@ void create_image(const char *rotation) {
     id++;
     FILE *fp = fopen("file.dot", "w+");
     fprintf(fp, "digraph BST {");
-    fprintf(fp, "\n%s", rotation);
+    fprintf(fp, "\n%s [shape=box];", rotation);
     fprintf(fp, "\nnode [fontname=\"Arial\"];");
 
     write_in_file(fp, root);
@@ -61,47 +62,75 @@ void create_image(const char *rotation) {
     fclose(fp);
 
     char sid[8];
-    char command[40];
+    char command[46];
 
     sprintf(sid, "%d", id);
 
     strcpy(command, "dot -Tpng file.dot -o ");
+    strcat(command, "image-");
     strcat(command, sid);
     strcat(command, ".png");
 
     system(command);
 }
 
-Node* right_rotation(Node* t){
-    Node* u = t->left;
-    t->left = u->right;
-    u->right = t;
+Node * right_rotation(Node *r){
+    Node* u = r->left;
+
+    if(r->dad) {
+        if(r->value > r->dad->value)
+            r->dad->right = u;
+        else
+            r->dad->left = u;
+    }
+
+    u->dad = r->dad;
+    r->dad = u;
+
+    if(u->right)
+        u->right->dad = r;
+    
+    r->left = u->right;
+    u->right = r;
 
     return u;
 }
 
-Node* left_rotation(Node* t){
-    Node* u = t->right;
-    t->right = u->left;
-    u->left = t;
+Node * left_rotation(Node *r){
+    Node* u = r->right;
+
+    if(r->dad) {
+        if(r->value > r->dad->value)
+            r->dad->right = u;
+        else
+            r->dad->left = u;
+    }
+
+    u->dad = r->dad;
+    r->dad = u;
+
+    if(u->left)
+        u->left->dad = r;
+    
+    r->right = u->left;
+    u->left = r;
 
     return u;
 }
 
-Node* right_left_rotation(Node* t){
-    t->right = right_rotation(t->right);
-    return left_rotation(t);
+Node * left_right_rotation(Node *r){
+    r->left = left_rotation(r->left);
+    return right_rotation(r);
 }
 
-Node* left_right_rotation(Node* t){
-    t->left = left_rotation(t->left);
-    return right_rotation(t);
+Node * right_left_rotation(Node *r){
+    r->right = right_rotation(r->right);
+    return left_rotation(r);
 }
-
 
 int height(Node *r) {
-   if (r == NULL)
-      return 0;
+   if (!r)
+      return -1;
    else {
       int hl = height(r->left);
       int hr = height(r->right);
@@ -112,64 +141,148 @@ int height(Node *r) {
    }
 }
 
-Node *new_node() {
-    Node *t = (Node *) malloc(sizeof(Node));
-    return t;
+int balancing_factor(Node *r){
+    int factor;
+    if(r){
+        factor = ((height(r->right) + 1) - (height(r->left) + 1));
+        return factor;
+    }
+
+    return -1;
 }
 
-Node* insert(int x, node* t){
-    if(t == NULL) {
-        t = new_node();
-        t->value = x;
-        t->left = t->right = NULL;
-    }
-    else if(x < t->value){
-        t->left = insert(x, t->left);
-        if(height(t->left) - height(t->right) == 2){
-            if(x < t->left->value) {
-                t = right_rotation(t);
-            }
-            else {
-                t = left_right_rotation(t);
-            }
+Node * balance_node(Node *node, int factor, char *rotation){
+    if(factor < -1){
+        if(balancing_factor(node->left) < 0) {
+            node = right_rotation(node);
+            strcpy(rotation, "right_rotation");
+        }
+        else {
+            node = left_right_rotation(node);
+            strcpy(rotation, "left_right_rotation");
         }
     }
-    else if(x > t->value){
-        t->right = insert(x, t->right);
-        if(height(t->right) - height(t->left) == 2){
-            if(x > t->right->value) {
-                t = left_rotation(t);
-            }
-            else {
-                t = right_left_rotation(t);
-            }
+    else if(factor > 1){
+        if(balancing_factor(node->right) > 0) {
+            node = left_rotation(node);
+            strcpy(rotation, "left_rotation");
+        }
+        else {
+            node = right_left_rotation(node);
+            strcpy(rotation, "right_left_rotation");
         }
     }
 
-    return t;
+    return node;
 }
 
+Node * balance(Node *r, char *rotation) {
+    Node *aux = r, *ret;
+    int factor;
+
+    while(aux) {
+        factor = balancing_factor(aux);
+        if(factor < 1 || factor > 1) {
+            aux = balance_node(aux, factor, rotation);
+        }
+        
+        if(!aux->dad)
+            ret = aux;
+        
+        aux = aux->dad;
+    }
+
+    return ret;
+}
+
+Node * new_node(int value){
+    Node *node = (Node*) malloc(sizeof(Node));
+
+    node->value = value;
+    node->dad = node->left = node->right = NULL;
+
+    return node;
+}
+
+Node * insert(Node *r, Node *node){
+    if(!r) {
+        return node;
+    }
+    else if((!r->left) || (!r->right)) {
+        node->dad = r;
+    }
+    
+    if(node->value > r->value)
+        r->right = insert(r->right, node);
+    else
+        r->left = insert(r->left, node);
+
+    return r;
+}
 
 void insert_values(int size) {
-    
+    Node *node;
+    char rotation[19];
+    char insert_text[15];
+    char insert_value[8];
+
+    memset(rotation, 0, strlen(rotation));
+    memset(insert_text, 0, strlen(insert_text));
+
     for(int i = 0; i < size; i++) {
-        root = insert(elements[i], root);
-        create_image("insert");
+        node = new_node(elements[i]);
+        root = insert(root, node);
+
+        sprintf(insert_value, "%d", elements[i]);
+        strcpy(insert_text, "insert_");
+        strcat(insert_text, insert_value);
+
+        create_image(insert_text);
+
+        memset(insert_text, 0, strlen(insert_text));
+
+        root = balance(node, rotation);
+
+        if(strlen(rotation) > 0) {
+            create_image(rotation);
+            memset(rotation, 0, strlen(rotation));
+        }
     }
 }
 
 int main() {
     int size;
+    char option;
 
-    cout << "\nDigite a quantidade de elementos que você quer na árvore: ";
+    cout << "\nEnter the amount of elements you want in the tree: ";
     cin >> size;
 
     id = 0;
     nulls = 0;
-    generate_vector(size);
-    insert_values(size);
 
-    // system("ffmpeg -framerate 1/1 -i %d.png -vf scale=1080:-2 avl.mp4");
+    cout << "\nAutomatically generate numbers? (Y/N): ";
+    cin >> option;
+
+    if(option == 'Y')
+        generate_vector(size);
+    else {
+        int aux;
+        cout << "\nEnter the numbers: ";
+        for(int i = 0; i < size; i++) {
+            cin >> aux;
+            elements.push_back(aux);
+        }
+    }
+
+    insert_values(size);
+    create_image("final");
+
+    system("ffmpeg -framerate 1/2 -i image-%d.png -vf scale=1080:-2 avl.mp4");
+
+    cout << endl << endl << "END";
+
+    cout << endl << endl << "A set of images showing the steps of the insertion in AVL was generated in the folder, also watch the video 'avl.mp4'.";
+    cout << endl << endl;
 
     return 0;
 }
